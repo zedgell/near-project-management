@@ -24,6 +24,7 @@ pub struct Project {
     pub(crate) reward: u128, // The reward is measured in yoctoNEAR. One NEAR is 10**24 yoctoNEAR
     pub(crate) status: Status,
     pub(crate) worker: Option<AccountId>,
+    pub(crate) project_owner: AccountId
 }
 
 impl Project {
@@ -32,6 +33,7 @@ impl Project {
         github_issue_link: String,
         description: String,
         reward: u128,
+        project_owner: AccountId
     ) -> Project {
         Project {
             id,
@@ -40,6 +42,7 @@ impl Project {
             reward,
             status: Status::Created,
             worker: None,
+            project_owner
         }
     }
 }

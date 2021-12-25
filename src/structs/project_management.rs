@@ -40,23 +40,19 @@ impl ProjectManagement {
         id: String,
         github_issue_link: String,
         description: String,
-        reward: String,
     ) -> Result<String, String> {
-        if env::current_account_id() != env::signer_account_id() {
-            Err("Only the company can create a project.".to_string())
-        } else {
-            self.projects.insert(
-                &id,
-                &Project::new(
-                    id.clone(),
-                    github_issue_link,
-                    description,
-                    reward.parse().unwrap(),
-                ),
-            );
-            self.project_ids.insert(&id);
-            Ok(id)
-        }
+        self.projects.insert(
+            &id,
+            &Project::new(
+                id.clone(),
+                github_issue_link,
+                description,
+                env::attached_deposit() as u128,
+                env::signer_account_id()
+            ),
+        );
+        self.project_ids.insert(&id);
+        Ok(id)
     }
 
     pub fn update_project(
@@ -66,10 +62,10 @@ impl ProjectManagement {
         description: Option<String>,
         reward: Option<String>,
     ) -> Result<String, String> {
-        if env::current_account_id() != env::signer_account_id() {
+        let mut project = self.projects.get(&id).unwrap();
+        if project.project_owner != env::signer_account_id() {
             Err("Only the company can create a project.".to_string())
         } else {
-            let mut project = self.projects.get(&id).unwrap();
             match github_issue_link {
                 None => (),
                 Some(link) => {
@@ -105,7 +101,7 @@ impl ProjectManagement {
             }
             Status::Created => {
                 // check if the company requested it
-                if env::current_account_id() == env::signer_account_id() {
+                if project.project_owner == env::signer_account_id() {
                     self.projects.remove(&job_id).unwrap();
                     self.project_ids.remove(&job_id);
                     Ok(())
@@ -172,10 +168,10 @@ impl ProjectManagement {
     }
 
     pub fn approve_user_for_project(&mut self, id: String, approve: bool) -> Result<(), String> {
-        if env::current_account_id() != env::signer_account_id() {
+        let mut project = self.projects.get(&id).unwrap();
+        if project.project_owner != env::signer_account_id() {
             Err("Only the company can approve a user.".to_string())
         } else {
-            let mut project = self.projects.get(&id).unwrap();
             match approve {
                 true => {
                     project.status = Status::NotStarted;
@@ -210,7 +206,7 @@ impl ProjectManagement {
             Status::InProgress | Status::NotStarted | Status::PendingWorkerApproval => {
                 // check if the worker or the the company requested it
                 if project.worker.unwrap() == env::signer_account_id()
-                    || env::current_account_id() == env::signer_account_id()
+                    || project.project_owner == env::signer_account_id()
                 {
                     project.worker = None;
                     project.status = Status::Created;
@@ -224,7 +220,7 @@ impl ProjectManagement {
                     self.projects.insert(&job_id, &project).unwrap();
                     Ok(())
                 } else {
-                    Err("The job owner or the company must request it to be removed.".to_string())
+                    Err("The worker or the company must request it to be removed.".to_string())
                 }
             }
             Status::Created => Err("The job has no user assigned to it.".to_string()),
@@ -237,7 +233,8 @@ impl ProjectManagement {
         id: String,
         approve: bool,
     ) -> Result<ApproveReturn, String> {
-        if env::current_account_id() != env::signer_account_id() {
+        let project = self.projects.get(&id).unwrap();
+        if project.project_owner != env::signer_account_id() {
             Err("Only the company can approve a project".to_string())
         } else {
             return match approve {
@@ -256,23 +253,19 @@ impl ProjectManagement {
     }
 
     pub fn set_project_complete(&mut self, id: String) -> Result<Promise, String> {
-        if env::current_account_id() != env::predecessor_account_id() {
-            Err("Only approving the submission can be used to mark it as complete".to_string())
-        } else {
-            let mut project = self.projects.get(&id).unwrap();
-            assert_ne!(project.status, Status::Complete);
-            let worker_id = project.worker.as_ref().unwrap();
-            project.status = Status::Complete;
-            self.projects.remove(&id);
-            self.projects.insert(&id, &project);
-            self.user_projects
-                .get(&worker_id)
-                .unwrap()
-                .get(&id)
-                .unwrap()
-                .status = Status::Complete;
-            Ok(Promise::new(worker_id.clone()).transfer(self.projects.get(&id).unwrap().reward))
-        }
+        let mut project = self.projects.get(&id).unwrap();
+        assert_ne!(project.status, Status::Complete);
+        let worker_id = project.worker.as_ref().unwrap();
+        project.status = Status::Complete;
+        self.projects.remove(&id);
+        self.projects.insert(&id, &project);
+        self.user_projects
+            .get(&worker_id)
+            .unwrap()
+            .get(&id)
+            .unwrap()
+            .status = Status::Complete;
+        Ok(Promise::new(worker_id.clone()).transfer(self.projects.get(&id).unwrap().reward))
     }
 
     pub fn get_all_projects(&self) -> AllProjectsReturn {

@@ -23,7 +23,7 @@ mod tests {
             account_balance: 200000000,
             account_locked_balance: 0,
             storage_usage: 0,
-            attached_deposit: 0,
+            attached_deposit: 2000,
             prepaid_gas: 10u64.pow(18),
             random_seed: vec![0, 1, 2],
             is_view,
@@ -44,30 +44,31 @@ mod tests {
             let result = contract.add_project(
                 i.to_string(),
                 "https://github.com/test-project/issues/1".to_string(),
-                "This is a test".to_string(),
-                "2000".parse().unwrap(),
+                "This is a test".to_string()
             );
             assert_eq!(result.is_ok(), true);
             let projects = contract.get_all_projects();
-            assert_eq!(projects.not_started.len(), i as usize);
+            assert_eq!(projects.created.len(), i as usize);
+            assert_eq!(projects.not_started.len(), 0 as usize);
             assert_eq!(projects.in_progress.len(), 0 as usize);
             assert_eq!(projects.complete.len(), 0 as usize);
+            assert_eq!(projects.created[0].reward, 2000 as u128)
         }
         for i in 1..3 {
             let result =
                 contract.set_user_for_project(i.to_string(), context.clone().current_account_id);
             assert_eq!(result.is_ok(), true);
             let projects = contract.get_all_projects();
-            assert_eq!(projects.not_started.len(), 4 - i as usize);
-            assert_eq!(projects.in_progress.len(), i as usize);
+            assert_eq!(projects.pending_work_approval.len(), i as usize);
+            assert_eq!(projects.in_progress.len(), 0 as usize);
             assert_eq!(projects.complete.len(), 0 as usize);
         }
         for i in 1..3 {
-            let result = contract.set_project_complete(i.to_string());
+            let result = contract.approve_submission(i.to_string().clone(), true);
             assert_eq!(result.is_ok(), true);
             let projects = contract.get_all_projects();
-            assert_eq!(projects.not_started.len(), 2 as usize);
-            assert_eq!(projects.in_progress.len(), 2 - i as usize);
+            assert_eq!(projects.pending_work_approval.len(), 2 - i as usize);
+            assert_eq!(projects.in_progress.len(), 0 as usize);
             assert_eq!(projects.complete.len(), i as usize);
         }
     }
@@ -83,8 +84,7 @@ mod tests {
             let result = contract.add_project(
                 i.to_string(),
                 "https://github.com/test-project/issues/1".to_string(),
-                "This is a test".to_string(),
-                "2000".parse().unwrap(),
+                "This is a test".to_string()
             );
             assert_eq!(result.is_ok(), true);
             let projects = contract.get_user_projects(context.clone().current_account_id);
@@ -96,14 +96,14 @@ mod tests {
                 contract.set_user_for_project(i.to_string(), context.clone().current_account_id);
             assert_eq!(result.is_ok(), true);
             let projects = contract.get_user_projects(context.clone().current_account_id);
-            assert_eq!(projects.in_progress.len(), i as usize);
+            assert_eq!(projects.pending_work_approval.len(), i as usize);
             assert_eq!(projects.complete.len(), 0 as usize);
         }
         for i in 1..3 {
             let result = contract.set_project_complete(i.to_string());
             assert_eq!(result.is_ok(), true);
             let projects = contract.get_user_projects(context.clone().current_account_id);
-            assert_eq!(projects.in_progress.len(), 2 - i as usize);
+            assert_eq!(projects.pending_work_approval.len(), 2 - i as usize);
             assert_eq!(projects.complete.len(), i as usize);
         }
     }
@@ -119,21 +119,9 @@ mod tests {
         let result = contract.add_project(
             "1".parse().unwrap(),
             "https://github.com/test-project/issues/1".to_string(),
-            "This is a test".to_string(),
-            "2000".parse().unwrap(),
+            "This is a test".to_string()
         );
         assert_eq!(result.is_ok(), true);
-        // sets the signing id to be different from current account.
-        let context = get_context(vec![], false, "sam.testnet".to_string());
-        testing_env!(context.clone());
-        let mut contract = ProjectManagement::new();
-        let result = contract.add_project(
-            "1".parse().unwrap(),
-            "https://github.com/test-project/issues/1".to_string(),
-            "This is a test".to_string(),
-            "2000".parse().unwrap(),
-        );
-        assert_eq!(result.is_ok(), false);
     }
 
     #[test]
@@ -148,8 +136,7 @@ mod tests {
         let id = contract.add_project(
             "1".parse().unwrap(),
             "https://github.com/test-project/issues/1".to_string(),
-            "This is a test".to_string(),
-            "100".parse().unwrap(),
+            "This is a test".to_string()
         );
         assert_eq!(id.is_ok(), true);
         let result = contract.set_user_for_project(id.clone().unwrap(), worker_account.clone());
@@ -158,13 +145,12 @@ mod tests {
         let id = contract.add_project(
             "2".parse().unwrap(),
             "https://github.com/test-project/issues/2".to_string(),
-            "This is a test 2".to_string(),
-            "2000".parse().unwrap(),
+            "This is a test 2".to_string()
         );
         assert_eq!(id.is_ok(), true);
         let result = contract.set_user_for_project(id.clone().unwrap(), worker_account.clone());
         assert_eq!(result.is_ok(), true);
-        let result = contract.set_project_complete(id.clone().unwrap());
-        assert_eq!(result.is_ok(), true)
+        let result = contract.approve_submission(id.unwrap().clone(), true);
+        assert_eq!(result.is_ok(), true);
     }
 }
