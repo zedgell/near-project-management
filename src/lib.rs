@@ -62,7 +62,8 @@ mod tests {
             assert_eq!(projects.complete.len(), 0 as usize);
         }
         for i in 1..3 {
-            contract.set_project_complete(i.to_string());
+            let result = contract.set_project_complete(i.to_string());
+            assert_eq!(result.is_ok(), true);
             let projects = contract.get_all_projects();
             assert_eq!(projects.not_started.len(), 2 as usize);
             assert_eq!(projects.in_progress.len(), 2 - i as usize);
@@ -95,7 +96,8 @@ mod tests {
             assert_eq!(projects.complete.len(), 0 as usize);
         }
         for i in 1..3 {
-            contract.set_project_complete(i.to_string());
+            let result = contract.set_project_complete(i.to_string());
+            assert_eq!(result.is_ok(), true);
             let projects = contract.get_user_projects(context.clone().current_account_id);
             assert_eq!(projects.in_progress.len(), 2 - i as usize);
             assert_eq!(projects.complete.len(), i as usize);
@@ -141,6 +143,7 @@ mod tests {
         assert_eq!(id.is_ok(), true);
         let result = contract.set_user_for_project(id.clone().unwrap(), worker_account.clone());
         assert_eq!(result.is_ok(), true);
-        contract.set_project_complete(id.clone().unwrap());
+        let result = contract.set_project_complete(id.clone().unwrap());
+        assert_eq!(result.is_ok(), true)
     }
 }

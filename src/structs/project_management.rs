@@ -113,15 +113,19 @@ impl ProjectManagement {
         }
     }
 
-    pub fn set_project_complete(&mut self, id: String) -> Promise {
-        let mut project = self.projects.get(&id).unwrap();
-        assert_ne!(project.status, Status::Complete);
-        let worker_id = project.worker.as_ref().unwrap();
-        project.status = Status::Complete;
-        self.projects.remove(&id);
-        self.projects.insert(&id, &project);
-        self.user_projects.get(&worker_id).unwrap().get(&id).unwrap().status = Status::Complete;
-        Promise::new(worker_id.clone()).transfer(self.projects.get(&id).unwrap().reward)
+    pub fn set_project_complete(&mut self, id: String) -> Result<Promise, String> {
+        if env::current_account_id() != env::signer_account_id() {
+            Err("Only the company can set the project to complete.".to_string())
+        } else {
+            let mut project = self.projects.get(&id).unwrap();
+            assert_ne!(project.status, Status::Complete);
+            let worker_id = project.worker.as_ref().unwrap();
+            project.status = Status::Complete;
+            self.projects.remove(&id);
+            self.projects.insert(&id, &project);
+            self.user_projects.get(&worker_id).unwrap().get(&id).unwrap().status = Status::Complete;
+            Ok(Promise::new(worker_id.clone()).transfer(self.projects.get(&id).unwrap().reward))
+        }
 
     }
 
