@@ -8,7 +8,10 @@ near_sdk::setup_alloc!();
 #[serde(crate = "near_sdk::serde")]
 pub enum Status {
     Complete,
+    PendingFinalApproval,
     InProgress,
+    NotStarted,
+    PendingWorkerApproval,
     Created,
 }
 

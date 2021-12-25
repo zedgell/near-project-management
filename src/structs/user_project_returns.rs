@@ -7,6 +7,9 @@ use near_sdk::serde::{Deserialize, Serialize};
 pub struct UserProjectsReturn {
     pub(crate) in_progress: Vec<Project>,
     pub(crate) complete: Vec<Project>,
+    pub(crate) pending_work_approval: Vec<Project>,
+    pub(crate) not_started: Vec<Project>,
+    pub(crate) pending_final_approval: Vec<Project>,
 }
 
 impl UserProjectsReturn {
@@ -14,6 +17,9 @@ impl UserProjectsReturn {
         UserProjectsReturn {
             in_progress: Vec::new(),
             complete: Vec::new(),
+            pending_work_approval: Vec::new(),
+            not_started: Vec::new(),
+            pending_final_approval: Vec::new(),
         }
     }
 }

@@ -7,6 +7,11 @@ use near_sdk::near_bindgen;
 use near_sdk::PanicOnDefault;
 use near_sdk::{env, AccountId, Promise};
 
+pub enum ApproveReturn {
+    Promise(Promise),
+    String(String),
+}
+
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct ProjectManagement {
@@ -89,13 +94,63 @@ impl ProjectManagement {
         }
     }
 
+    pub fn remove_project(&mut self, job_id: String) -> Result<(), String> {
+        let project = self.projects.get(&job_id).unwrap();
+        match project.status {
+            Status::Complete => {
+                Err("The job is complete and therefore cannot be removed.".to_string())
+            }
+            Status::InProgress => {
+                Err("The job is in progress. You must first remove the user from job.".to_string())
+            }
+            Status::Created => {
+                // check if the company requested it
+                if env::current_account_id() == env::signer_account_id() {
+                    self.projects.remove(&job_id).unwrap();
+                    self.project_ids.remove(&job_id);
+                    Ok(())
+                } else {
+                    Err("The company must request this.".to_string())
+                }
+            }
+            Status::PendingFinalApproval => {
+                Err("The job is pending final approval and therefore cannot be removed.".to_string())
+            }
+            Status::NotStarted => {
+                Err("This job has a user assigned and cannot be removed. You must first remove the user from job.".to_string())
+            }
+            Status::PendingWorkerApproval => {
+                Err("This job is has a worked awaiting approval and cannot be removed. You must decline the user the job".to_string())
+            }
+        }
+    }
+
+    pub fn set_project_status(&mut self, id: String, status: String) -> Result<(), String> {
+        let mut project = self.projects.get(&id).unwrap();
+        if !project.worker.is_some() {
+            Err("Only jobs with workers assigned can be changed".to_string())
+        } else if project.status == Status::PendingWorkerApproval {
+            Err("This job is pending a worker approval and cannot be changed".to_string())
+        } else {
+            match status.to_lowercase().as_str() {
+                "not started" => project.status = Status::NotStarted,
+                "in progress" => project.status = Status::InProgress,
+                "pending final approval" => project.status = Status::InProgress,
+                _ => return Err(format!("{} is not a valid value", &status).to_string()),
+            }
+            self.projects.remove(&id).unwrap();
+            self.projects.insert(&id, &project);
+            Ok(())
+        }
+    }
+
     pub fn set_user_for_project(&mut self, id: String, worker_id: String) -> Result<(), String> {
         let mut project = self.projects.get(&id).unwrap();
         if project.worker.is_some() {
             Err("The project done has a user attached to it. Please remove the user before preceding.".to_string())
         } else {
             project.worker = Option::from(worker_id.clone());
-            project.status = Status::InProgress;
+            project.status = Status::PendingWorkerApproval;
             self.projects.remove(&id);
             self.projects.insert(&id, &project);
             let user_projects_result = self.user_projects.get(&worker_id);
@@ -116,9 +171,93 @@ impl ProjectManagement {
         }
     }
 
-    pub fn set_project_complete(&mut self, id: String) -> Result<Promise, String> {
+    pub fn approve_user_for_project(&mut self, id: String, approve: bool) -> Result<(), String> {
         if env::current_account_id() != env::signer_account_id() {
-            Err("Only the company can set the project to complete.".to_string())
+            Err("Only the company can approve a user.".to_string())
+        } else {
+            let mut project = self.projects.get(&id).unwrap();
+            match approve {
+                true => {
+                    project.status = Status::NotStarted;
+                }
+                false => {
+                    project.status = Status::Created;
+                    self.user_projects
+                        .get(&project.worker.unwrap())
+                        .unwrap()
+                        .remove(&id);
+                    self.user_ids.remove(&id);
+                    project.worker = None;
+                }
+            }
+            self.projects.remove(&id);
+            self.projects.insert(&id, &project);
+            Ok(())
+        }
+    }
+
+    pub fn remove_user_from_project(
+        &mut self,
+        job_id: String,
+        worker_id: String,
+    ) -> Result<(), String> {
+        let mut project = self.projects.get(&job_id).unwrap();
+        match project.status {
+            Status::Complete => Err(
+                "The job is marked as complete and therefore you cannot remove user from job."
+                    .to_string(),
+            ),
+            Status::InProgress | Status::NotStarted | Status::PendingWorkerApproval => {
+                // check if the worker or the the company requested it
+                if project.worker.unwrap() == env::signer_account_id()
+                    || env::current_account_id() == env::signer_account_id()
+                {
+                    project.worker = None;
+                    project.status = Status::Created;
+                    self.user_projects
+                        .get(&worker_id)
+                        .unwrap()
+                        .remove(&job_id)
+                        .unwrap();
+                    self.user_ids.remove(&job_id);
+                    self.projects.remove(&job_id).unwrap();
+                    self.projects.insert(&job_id, &project).unwrap();
+                    Ok(())
+                } else {
+                    Err("The job owner or the company must request it to be removed.".to_string())
+                }
+            }
+            Status::Created => Err("The job has no user assigned to it.".to_string()),
+            Status::PendingFinalApproval => Err("The job is pending final approval.".to_string()),
+        }
+    }
+
+    pub fn approve_submission(
+        &mut self,
+        id: String,
+        approve: bool,
+    ) -> Result<ApproveReturn, String> {
+        if env::current_account_id() != env::signer_account_id() {
+            Err("Only the company can approve a project".to_string())
+        } else {
+            return match approve {
+                true => {
+                    let result = self.set_project_complete(id.clone());
+                    match result {
+                        Ok(promise) => Ok(ApproveReturn::Promise(promise)),
+                        Err(e) => Err(e),
+                    }
+                }
+                false => Ok(ApproveReturn::String(
+                    "project was returned to in progress state".to_string(),
+                )),
+            };
+        }
+    }
+
+    pub fn set_project_complete(&mut self, id: String) -> Result<Promise, String> {
+        if env::current_account_id() != env::predecessor_account_id() {
+            Err("Only approving the submission can be used to mark it as complete".to_string())
         } else {
             let mut project = self.projects.get(&id).unwrap();
             assert_ne!(project.status, Status::Complete);
@@ -146,8 +285,13 @@ impl ProjectManagement {
                     projects.in_progress.push(project);
                 }
                 Status::Created => {
-                    projects.not_started.push(project);
+                    projects.created.push(project);
                 }
+                Status::PendingWorkerApproval => {
+                    projects.pending_work_approval.push(project);
+                }
+                Status::NotStarted => projects.not_started.push(project),
+                Status::PendingFinalApproval => projects.pending_final_approval.push(project),
             }
         }
         projects
@@ -166,67 +310,15 @@ impl ProjectManagement {
                     Status::InProgress => {
                         projects.in_progress.push(project);
                     }
-                    Status::Created => {}
+                    Status::NotStarted => {
+                        projects.not_started.push(project);
+                    }
+                    Status::PendingWorkerApproval => projects.pending_work_approval.push(project),
+                    Status::PendingFinalApproval => projects.pending_final_approval.push(project),
+                    _ => {}
                 },
             }
         }
         projects
-    }
-
-    pub fn remove_user_from_project(
-        &mut self,
-        job_id: String,
-        worker_id: String,
-    ) -> Result<(), String> {
-        let mut project = self.projects.get(&job_id).unwrap();
-        match project.status {
-            Status::Complete => Err(
-                "The job is marked as complete and therefore you cannot remove user from job."
-                    .to_string(),
-            ),
-            Status::InProgress => {
-                // check if the worker or the the company requested it
-                if project.worker.unwrap() == env::signer_account_id()
-                    || env::current_account_id() == env::signer_account_id()
-                {
-                    project.worker = None;
-                    project.status = Status::Created;
-                    self.user_projects
-                        .get(&worker_id)
-                        .unwrap()
-                        .remove(&job_id)
-                        .unwrap();
-                    self.user_ids.remove(&job_id);
-                    self.projects.remove(&job_id).unwrap();
-                    self.projects.insert(&job_id, &project).unwrap();
-                    Ok(())
-                } else {
-                    Err("The job owner or the company must request it to be removed.".to_string())
-                }
-            }
-            Status::Created => Err("The job has no user assigned to it.".to_string()),
-        }
-    }
-
-    pub fn remove_project(&mut self, job_id: String) -> Result<(), String> {
-        let project = self.projects.get(&job_id).unwrap();
-        match project.status {
-            Status::Complete => {
-                Err("The job is complete and therefore cannot be removed.".to_string())
-            }
-            Status::InProgress => {
-                Err("The job is in progress. You must first remove the user from job.".to_string())
-            }
-            Status::Created => {
-                // check if the company requested it
-                if env::current_account_id() == env::signer_account_id() {
-                    self.projects.remove(&job_id).unwrap();
-                    self.project_ids.remove(&job_id);
-                    Ok(())
-                } else {
-                    Err("The company must request this.".to_string())
-                }
-            }
-        }
     }
 }

@@ -123,6 +123,17 @@ mod tests {
             "2000".parse().unwrap(),
         );
         assert_eq!(result.is_ok(), true);
+        // sets the signing id to be different from current account.
+        let context = get_context(vec![], false, "sam.testnet".to_string());
+        testing_env!(context.clone());
+        let mut contract = ProjectManagement::new();
+        let result = contract.add_project(
+            "1".parse().unwrap(),
+            "https://github.com/test-project/issues/1".to_string(),
+            "This is a test".to_string(),
+            "2000".parse().unwrap(),
+        );
+        assert_eq!(result.is_ok(), false);
     }
 
     #[test]
