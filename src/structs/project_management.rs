@@ -1,11 +1,11 @@
-use near_sdk::collections::{LookupMap, UnorderedSet};
-use near_sdk::{AccountId, Promise, env};
-use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::{near_bindgen};
-use near_sdk::PanicOnDefault;
 use crate::structs::all_projects_return::AllProjectsReturn;
 use crate::structs::project::{Project, Status};
 use crate::structs::user_project_returns::UserProjectsReturn;
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::collections::{LookupMap, UnorderedSet};
+use near_sdk::near_bindgen;
+use near_sdk::PanicOnDefault;
+use near_sdk::{env, AccountId, Promise};
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
@@ -15,7 +15,7 @@ pub struct ProjectManagement {
     pub(crate) projects: LookupMap<String, Project>,
     // The reason for user_projects and user_ids is to reduce the loop time when getting/removing user_projects
     pub(crate) user_ids: UnorderedSet<String>,
-    pub(crate) user_projects: LookupMap<AccountId, LookupMap<String, Project>>
+    pub(crate) user_projects: LookupMap<AccountId, LookupMap<String, Project>>,
 }
 
 #[near_bindgen]
@@ -26,7 +26,7 @@ impl ProjectManagement {
             project_ids: UnorderedSet::new(b"i"),
             projects: LookupMap::new(b"p"),
             user_ids: UnorderedSet::new(b"s"),
-            user_projects: LookupMap::new(b"u")
+            user_projects: LookupMap::new(b"u"),
         }
     }
 
@@ -35,17 +35,20 @@ impl ProjectManagement {
         id: String,
         github_issue_link: String,
         description: String,
-        reward: String
+        reward: String,
     ) -> Result<String, String> {
         if env::current_account_id() != env::signer_account_id() {
             Err("Only the company can create a project.".to_string())
         } else {
-            self.projects.insert(&id, &Project::new(
-                id.clone(),
-                github_issue_link,
-                description,
-                reward.parse().unwrap()
-            ));
+            self.projects.insert(
+                &id,
+                &Project::new(
+                    id.clone(),
+                    github_issue_link,
+                    description,
+                    reward.parse().unwrap(),
+                ),
+            );
             self.project_ids.insert(&id);
             Ok(id)
         }
@@ -56,7 +59,7 @@ impl ProjectManagement {
         id: String,
         github_issue_link: Option<String>,
         description: Option<String>,
-        reward: Option<String>
+        reward: Option<String>,
     ) -> Result<String, String> {
         if env::current_account_id() != env::signer_account_id() {
             Err("Only the company can create a project.".to_string())
@@ -123,10 +126,14 @@ impl ProjectManagement {
             project.status = Status::Complete;
             self.projects.remove(&id);
             self.projects.insert(&id, &project);
-            self.user_projects.get(&worker_id).unwrap().get(&id).unwrap().status = Status::Complete;
+            self.user_projects
+                .get(&worker_id)
+                .unwrap()
+                .get(&id)
+                .unwrap()
+                .status = Status::Complete;
             Ok(Promise::new(worker_id.clone()).transfer(self.projects.get(&id).unwrap().reward))
         }
-
     }
 
     pub fn get_all_projects(&self) -> AllProjectsReturn {
@@ -134,9 +141,7 @@ impl ProjectManagement {
         for id in self.project_ids.to_vec() {
             let project = self.projects.get(&id).unwrap();
             match project.status {
-                Status::Complete => {
-                    projects.complete.push(project)
-                }
+                Status::Complete => projects.complete.push(project),
                 Status::InProgress => {
                     projects.in_progress.push(project);
                 }
@@ -154,34 +159,43 @@ impl ProjectManagement {
             let result = self.user_projects.get(&worker_id).unwrap().get(&id);
             match result {
                 None => {}
-                Some(project) => {
-                    match project.status {
-                        Status::Complete => {
-                            projects.complete.push(project);
-                        }
-                        Status::InProgress => {
-                            projects.in_progress.push(project);
-                        }
-                        Status::Created => {}
+                Some(project) => match project.status {
+                    Status::Complete => {
+                        projects.complete.push(project);
                     }
-                }
+                    Status::InProgress => {
+                        projects.in_progress.push(project);
+                    }
+                    Status::Created => {}
+                },
             }
         }
         projects
     }
 
-    pub fn remove_user_from_project(&mut self, job_id: String, worker_id: String) -> Result<(), String> {
+    pub fn remove_user_from_project(
+        &mut self,
+        job_id: String,
+        worker_id: String,
+    ) -> Result<(), String> {
         let mut project = self.projects.get(&job_id).unwrap();
         match project.status {
-            Status::Complete => {
-                Err("The job is marked as complete and therefore you cannot remove user from job.".to_string())
-            }
+            Status::Complete => Err(
+                "The job is marked as complete and therefore you cannot remove user from job."
+                    .to_string(),
+            ),
             Status::InProgress => {
                 // check if the worker or the the company requested it
-                if project.worker.unwrap() == env::signer_account_id() || env::current_account_id() == env::signer_account_id() {
+                if project.worker.unwrap() == env::signer_account_id()
+                    || env::current_account_id() == env::signer_account_id()
+                {
                     project.worker = None;
                     project.status = Status::Created;
-                    self.user_projects.get(&worker_id).unwrap().remove(&job_id).unwrap();
+                    self.user_projects
+                        .get(&worker_id)
+                        .unwrap()
+                        .remove(&job_id)
+                        .unwrap();
                     self.user_ids.remove(&job_id);
                     self.projects.remove(&job_id).unwrap();
                     self.projects.insert(&job_id, &project).unwrap();
@@ -190,9 +204,7 @@ impl ProjectManagement {
                     Err("The job owner or the company must request it to be removed.".to_string())
                 }
             }
-            Status::Created => {
-                Err("The job has no user assigned to it.".to_string())
-            }
+            Status::Created => Err("The job has no user assigned to it.".to_string()),
         }
     }
 
