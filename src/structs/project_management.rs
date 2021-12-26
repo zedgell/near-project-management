@@ -2,11 +2,14 @@ use crate::structs::all_projects_return::AllProjectsReturn;
 use crate::structs::project::{Project, Status};
 use crate::structs::user_project_returns::UserProjectsReturn;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::serde::{Serialize};
 use near_sdk::collections::{LookupMap, UnorderedSet};
 use near_sdk::near_bindgen;
 use near_sdk::PanicOnDefault;
 use near_sdk::{env, AccountId, Promise};
 
+#[derive(Serialize)]
+#[serde(crate = "near_sdk::serde")]
 pub enum ApproveReturn {
     Promise(Promise),
     String(String),
