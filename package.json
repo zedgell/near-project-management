@@ -1,8 +1,12 @@
 {
   "private": true,
   "scripts": {
-    "test": "near-workspaces-ava --config ./ava.config.cjs",
-    "test:testnet": "near-workspaces-ava --config ./ava.testnet.config.cjs"
+    "build": "cargo build --target wasm32-unknown-unknown --release",
+    "unit:test": "cargo test -- --nocapture",
+    "int:test": "near-workspaces-ava --config ./ava.config.cjs",
+    "int:test:testnet": "near-workspaces-ava --config ./ava.testnet.config.cjs",
+    "deploy": "./deploy.sh",
+    "cleanup": "./cleanup.sh && cargo clean"
   },
   "devDependencies": {
     "near-workspaces-ava": "1.0.0",
