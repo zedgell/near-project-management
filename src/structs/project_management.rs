@@ -38,6 +38,7 @@ impl ProjectManagement {
         }
     }
 
+    #[payable]
     pub fn add_project(
         &mut self,
         id: String,
@@ -67,7 +68,7 @@ impl ProjectManagement {
     ) -> Result<String, String> {
         let mut project = self.projects.get(&id).unwrap();
         if project.project_owner != env::signer_account_id() {
-            Err("Only the company can create a project.".to_string())
+            Err("You can only edit projects you own.".to_string())
         } else {
             match github_issue_link {
                 None => (),

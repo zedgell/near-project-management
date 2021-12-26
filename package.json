@@ -1,10 +1,11 @@
 {
   "private": true,
   "scripts": {
-    "test": "near-workspaces-ava",
+    "test": "near-workspaces-ava --config ./ava.config.cjs",
     "test:testnet": "near-workspaces-ava --config ./ava.testnet.config.cjs"
   },
   "devDependencies": {
-    "near-workspaces-ava": "1.0.0"
+    "near-workspaces-ava": "1.0.0",
+    "uuid": "^8.3.2"
   }
 }

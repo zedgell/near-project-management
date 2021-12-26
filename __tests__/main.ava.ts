@@ -1,161 +1,146 @@
-/**
- * Welcome to near-workspaces-ava!
- *
- * This is a working test which checks the functionality of [the status-message
- * contract][1]. For quick reference, here's the contract's implementation:
- *
- *     impl StatusMessage {
- *         pub fn set_status(&mut self, message: String) {
- *             let account_id = env::signer_account_id();
- *             self.records.insert(&account_id, &message);
- *         }
+import {BN, Workspace} from 'near-workspaces-ava';
+import {v4 as uuid} from 'uuid'
 
- *         pub fn get_status(&self, account_id: String) -> Option<String> {
- *             return self.records.get(&account_id);
- *         }
- *     }
- *
- * As you can see, this contract only has two methods, a setter and a getter.
- * The setter sets a status message for the account that signed the call to the
- * contract. The getter accepts an `account_id` param and returns the status for
- * that account.
- *
- * The tests below create a local blockchain with this contract deployed to
- * one account and two more accounts which store statuses in the contract.
- *
- *   [1]: https://github.com/near-examples/rust-status-message/tree/4e4767db257b748950bb3393352e2fff6c8e9b17
- */
-
-/**
- * Start off by importing Workspace from near-workspaces-ava.
- */
-import {Workspace} from 'near-workspaces-ava';
-
-/**
- * Initialize a new workspace. In local sandbox mode, this will:
- *
- *   - Create a new local blockchain
- *   - Create the root account for that blockchain (see `root` below)
- *   - Execute any actions passed to the function
- *   - Shut down the newly created blockchain, but *save the data*
- */
 const workspace = Workspace.init(async ({root}) => {
   // Create a subaccount of the root account, like `alice.sandbox`
   // (the actual account name is not guaranteed; you can get it with `alice.accountId`)
-  const alice = await root.createAccount('alice');
-
+  const company1 = await root.createAccount('company1');
+  const company2 = await root.createAccount('company2');
+  const worker1 = await root.createAccount('worker1');
+  const worker2 = await root.createAccount('worker2');
   // Create a subaccount of the root account, and also deploy a contract to it
   const contract = await root.createAndDeploy(
     // Subaccount name
-    'status-message',
+    'near_project_management',
 
     // Relative path (from package.json location) to the compiled contract file
     // which will be deployed to this account
-    'compiled-contracts/status_message.wasm',
+    './target/wasm32-unknown-unknown/release/near_project_management.wasm',
 
     // Provide `method` and `args` to call in the same transaction as the deploy
-    // {
-    //   method: 'init',
-    //   args: {owner_id: root},
-    // },
+    {
+      method: 'new',
+      args: {owner_id: root},
+    }
   );
-
-  // You can call any contract methods that you want executed before the
-  // beginning of all subsequent tests. In this example, Alice sets her status.
-  // Don't forget to `await` your calls!
-  await alice.call(contract, 'set_status', {message: 'hello'});
 
   // Return the accounts that you want available in subsequent tests
   // (`root` is always available)
-  return {alice, contract};
+  return {company1, company2, worker1, worker2, contract};
 });
 
-/**
- * Now you can write some tests! In local sandbox mode, each `workspace.test` will:
- *
- *   - start a new local blockchain
- *   - copy the state from the blockchain created in `Workspace.init`
- *   - get access to the accounts created in `Workspace.init` using the same variable names
- *   - run concurrently with all other `workspace.test` calls, keeping data isolated
- *   - shut down at the end, forgetting all new data created
- *
- * It's also worth knowing that `workspace.test` is syntax sugar added by
- * near-workspaces-ava. With raw AVA + near-workspaces, here's how to write a test:
- *
- *     import avaTest from 'ava';
- *     import {Workspace} from 'near-workspaces';
- *     // Alternatively, you can import Workspace and ava both from near-workspaces-ava:
- *     // import {ava as avaTest, Workspace} from 'near-workspaces-ava';
- *
- *     const workspace = Workspace.init(...);
- *
- *     avaTest('root sets status', async test => {
- *       await workspace.fork(async ({contract, root}) => {
- *         ...
- *       });
- *     });
- *
- * Instead, with the syntax sugar, you can write this as you see it below –
- * saving an indentation level and avoiding one extra `await`.
- * (Extra credit: try rewriting this test using the "sugar-free" syntax.)
-*/
-workspace.test('root sets status', async (test, {contract, root}) => {
-  // Don't forget to `await` your calls!
-  await root.call(contract, 'set_status', {message: 'lol'});
-
-  // Assert that two things are identical using `test.is`
-  test.is(
-    // Note that Root called the contract with `root.call(contract, ...)`, but
-    // you view the contract with `contract.view`, since the account doing the
-    // viewing is irrelevant.
-    await contract.view('get_status', {account_id: root}),
-    'lol',
-  );
+workspace.test('Root can add project', async (test, {contract, root}) => {
+  let id: String = uuid().toString()
+  let args = {
+    id,
+    github_issue_link: "https://github.com/dummy-repo/issues/1",
+    description: "this is a test"
+  }
+  let return_value: any = await root.call(contract, 'add_project', args, {attachedDeposit: new BN(2000)});
+  test.is(return_value.Ok, id);
 });
 
-workspace.test('statuses initialized in Workspace.init', async (test, {alice, contract, root}) => {
-  // If you want to store a `view` in a local variable, you can inform
-  // TypeScript what sort of return value you expect.
-  const aliceStatus: string = await contract.view('get_status', {account_id: alice});
-  const rootStatus: null = await contract.view('get_status', {account_id: root});
+workspace.test("Different company's can add projects", async (test, {
+    company1,
+    company2,
+    worker1,
+    worker2,
+    contract,
+    root
+}) => {
+  let id: String = uuid().toString()
+  let args = {
+    id,
+    github_issue_link: "https://github.com/dummy-repo/issues/1",
+    description: "this is a test"
+  }
+  let return_value: any = await company1.call(contract, 'add_project', args, {attachedDeposit: new BN(2000)});
+  test.is(return_value.Ok, id);
+  id = uuid().toString();
+  args = {
+    id,
+    github_issue_link: "https://github.com/dummy-repo/issues/1",
+    description: "this is a test"
+  }
+  return_value = await company2.call(contract, 'add_project', args, {attachedDeposit: new BN(2000)});
+  test.is(return_value.Ok, id);
+})
 
-  test.is(aliceStatus, 'hello');
+workspace.test("Test get all projects", async (test, {
+  company1,
+  company2,
+  worker1,
+  worker2,
+  contract,
+  root
+}) => {
+  let id: String = uuid().toString()
+  let args = {
+    id,
+    github_issue_link: "https://github.com/dummy-repo/issues/1",
+    description: "this is a test"
+  }
+  let return_value: any = await company1.call(contract, 'add_project', args, {attachedDeposit: new BN(2000)});
+  test.is(return_value.Ok, id);
+  let expectedResponse = {
+    id,
+    github_issue_link: "https://github.com/dummy-repo/issues/1",
+    description: "this is a test",
+    reward: 2000,
+    status: "Created",
+    worker: null,
+    project_owner: company1.accountId
+  }
+  let projects: any = await contract.view("get_all_projects");
+  test.is(projects.created.length, 1)
+  test.deepEqual(projects.created[0], expectedResponse)
+  id = uuid().toString();
+  args = {
+    id,
+    github_issue_link: "https://github.com/dummy-repo/issues/1",
+    description: "this is a test"
+  }
+  return_value = await company2.call(contract, 'add_project', args, {attachedDeposit: new BN(2000)});
+  test.is(return_value.Ok, id);
+  projects  = await contract.view("get_all_projects");
+  test.is(projects.created.length, 2)
+  expectedResponse.id = id
+  expectedResponse.project_owner = company2.accountId
+  test.deepEqual(projects.created[1], expectedResponse)
+})
 
-  // Note that the test above sets a status for `root`, but here it's still
-  // null! This is because tests run concurrently in isolated environments.
-  test.is(rootStatus, null);
-});
-
-workspace.test('extra goodies', async (test, {alice, contract, root}) => {
-  /**
-   * AVA's `test` object has all sorts of handy functions. For example: `test.log`.
-   * This is better than `console.log` in a couple ways:
-   *
-   *   - The log output only shows up if you pass `--verbose` or if the test fails.
-   *   - The output is nicely-formatted, right below the rest of the test output.
-   *
-   * Try it out using `npm run test -- --verbose` (with yarn: `yarn test --verbose`),
-   * or by adding `--verbose` to the `test` script in package.json
-   */
-  test.log({
-    alice: alice.accountId,
-    contract: contract.accountId,
-    root: root.accountId,
-  });
-
-  /**
-   * The Account class from near-workspaces overrides `toJSON` so that removing
-   * `.accountId` from the lines above gives the same behavior.
-   * (This explains something about the example `contract.view` calls above:
-   * you may have noticed that they use things like `{account_id: root}`
-   * instead of `{account_id: root.accountId}`.)
-   * Here's a test to prove it; try updating the `test.log` above to see it.
-   */
-  test.is(
-    JSON.stringify({alice}), // This is JS shorthand for `{ alice: alice }`
-    JSON.stringify({alice: alice.accountId}),
-  );
-});
-
-// For more example tests, see:
-// https://github.com/near/workspaces-js/tree/main/__tests__
+workspace.test("Test that a user cannot edit another users project", async (test, {
+  company1,
+  company2,
+  worker1,
+  worker2,
+  contract,
+  root
+}) => {
+  let id: String = uuid().toString()
+  let args = {
+    id,
+    github_issue_link: "https://github.com/dummy-repo/issues/1",
+    description: "this is a test"
+  }
+  let return_id1: any = await company1.call(contract, 'add_project', args, {attachedDeposit: new BN(2000)});
+  id = uuid().toString();
+  args = {
+    id,
+    github_issue_link: "https://github.com/dummy-repo/issues/1",
+    description: "this is a test"
+  }
+  let return_id2: any = await company2.call(contract, 'add_project', args, {attachedDeposit: new BN(2000)});
+  args = {
+    id: return_id1.Ok,
+    description: "test",
+    github_issue_link: "https://github.com/dummy-repo/issues/1"
+  }
+  let result: any = await company2.call(contract, 'update_project', args)
+  test.is(result.Err, 'You can only edit projects you own.')
+  args.id = return_id2.Ok
+  result = await company1.call(contract, 'update_project', args)
+  test.is(result.Err, 'You can only edit projects you own.')
+  result = await company2.call(contract, 'update_project', args)
+  test.is(result.Err, undefined)
+})
