@@ -9,6 +9,11 @@ tasks:
       npm i -g near-cli &&
       gp sync-done installs
     command: echo "Installed all tools"
+
+  - name: Install all npm packaged
+    init: >
+      npm i
+
   - name: Run Test
     init: >
       gp sync-await installs &&
