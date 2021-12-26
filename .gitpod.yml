@@ -3,10 +3,21 @@ image:
 
 # List the start up tasks. Learn more https://www.gitpod.io/docs/config-start-tasks/
 tasks:
-  - init: echo 'init script' # runs during prebuild
-    command: echo 'start script'
-
-# List the ports to expose. Learn more https://www.gitpod.io/docs/config-ports/
-ports:
-  - port: 3000
-    onOpen: open-preview
+  - name: Install tools
+    init: > 
+      rustup target add wasm32-unkown-unknown &&
+      npm i -g near-cli &&
+      gp sync-done installs
+    command: echo "Installed all tools"
+  - name: Run Test
+    init: >
+      gp sync-await installs &&
+      cargo test -- --nocapture &&
+      gp sync-done test
+    command: echo "Ran all test"
+  
+  - name: Build
+    init: >
+      gp sync-await test &&
+      cargo build --target wasm32-unknown-unknown --release
+    command: echo "Built the wasm files"
